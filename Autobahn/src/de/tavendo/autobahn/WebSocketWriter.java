@@ -441,32 +441,33 @@ public class WebSocketWriter extends Handler {
                mBufferEnc.clear();
                
                SSLEngineResult res;
-               do {
-                  res = mSSLEngine.wrap(mBuffer.getBuffer(), mBufferEnc.getBuffer());
+               
+               res = mSSLEngine.wrap(mBuffer.getBuffer(), mBufferEnc.getBuffer());
+               
+               if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
+               if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
+               if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
+               
+               boolean shouldWrite = !triggerWrap || res.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW;
+               if (shouldWrite) {
+                  mBufferEnc.flip();
                   
-                  if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
-                  if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
-                  if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
-                  
-                  boolean shouldWrite = !triggerWrap || res.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW;
-                  if (shouldWrite) {
-                     mBufferEnc.flip();
-                     
-                     while (mBufferEnc.remaining() > 0) {
-                        // this can block on socket write
-                        written = mSocket.write(mBufferEnc.getBuffer());
-                        if (DEBUG) Log.d(TAG, "WRITTEN (WSS): " + written);
-                     }
-                     mBufferEnc.clear();
+                  while (mBufferEnc.remaining() > 0) {
+                     // this can block on socket write
+                     written = mSocket.write(mBufferEnc.getBuffer());
+                     if (DEBUG) Log.d(TAG, "WRITTEN (WSS): " + written);
                   }
+                  mBufferEnc.clear();
+               }
 
-                  runDelegatedTasks(res);
-                  
-                  if (!triggerWrap) {
-                     break;
-                  }
-                  
-               } while (res.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP);
+               runDelegatedTasks(res);
+               
+               triggerWrap = mSSLEngine.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP;
+               if (DEBUG) Log.d(TAG, "Retrigger: " + triggerWrap);
+               
+               if (!triggerWrap) {
+                  break;
+               }
             
             } else {
                // not SSL
