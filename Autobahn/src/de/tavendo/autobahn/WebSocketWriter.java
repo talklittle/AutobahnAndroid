@@ -440,13 +440,13 @@ public class WebSocketWriter extends Handler {
             if (mSSLEngine != null) {
                mBufferEnc.clear();
                
-               SSLEngineResult res;
-               
-               res = mSSLEngine.wrap(mBuffer.getBuffer(), mBufferEnc.getBuffer());
+               SSLEngineResult res = mSSLEngine.wrap(mBuffer.getBuffer(), mBufferEnc.getBuffer());
                
                if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
                if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
                if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
+               
+               runDelegatedTasks(res);
                
                boolean shouldWrite = !triggerWrap || res.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW;
                if (shouldWrite) {
@@ -457,11 +457,8 @@ public class WebSocketWriter extends Handler {
                      written = mSocket.write(mBufferEnc.getBuffer());
                      if (DEBUG) Log.d(TAG, "WRITTEN (WSS): " + written);
                   }
-                  mBufferEnc.clear();
                }
 
-               runDelegatedTasks(res);
-               
                triggerWrap = mSSLEngine.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP;
                if (DEBUG) Log.d(TAG, "Retrigger: " + triggerWrap);
                
