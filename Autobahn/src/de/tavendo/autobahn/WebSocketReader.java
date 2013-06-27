@@ -685,6 +685,7 @@ public class WebSocketReader extends Thread {
          mBuffer.clear();
          do {
             if (mSSLEngine != null) {
+               mBufferEnc.clear();
                SSLEngineResult res = wssReadAndDecode();
                
                if (res != null) {
@@ -758,7 +759,6 @@ public class WebSocketReader extends Thread {
     * @return The result of SSLEngine.unwrap, or null if no data or error.
     */
    private SSLEngineResult wssReadAndDecode() throws IOException {
-      mBufferEnc.clear();
       // blocking read on socket
       int len = mSocket.read(mBufferEnc);
       if (DEBUG) Log.d(TAG, "READ (WSS): " + len + " - " + mBufferEnc.remaining() + " - " + mSocket.isBlocking());
@@ -788,7 +788,7 @@ public class WebSocketReader extends Thread {
          if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
          if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
          
-         if (res.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+         while (res.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
             res = wssReadAndDecode();
          }
          
