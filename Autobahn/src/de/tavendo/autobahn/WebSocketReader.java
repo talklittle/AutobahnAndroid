@@ -689,12 +689,12 @@ public class WebSocketReader extends Thread {
                SSLEngineResult res = wssReadAndDecode();
                
                if (res != null) {
-                  SSLEngineResult.HandshakeStatus lastHandshakeStatus = res.getHandshakeStatus();
-                  while (res.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.FINISHED &&
-                         res.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
+                  SSLEngineResult.HandshakeStatus lastHandshakeStatus = mSSLEngine.getHandshakeStatus();
+                  while (mSSLEngine.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.FINISHED &&
+                         mSSLEngine.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
                      
-                     SSLEngineResult.HandshakeStatus switchHandshakeStatus = res.getHandshakeStatus();
-                     res = wssHandshakeStep(res, lastHandshakeStatus);
+                     SSLEngineResult.HandshakeStatus switchHandshakeStatus = mSSLEngine.getHandshakeStatus();
+                     wssHandshakeStep(lastHandshakeStatus);
                      lastHandshakeStatus = switchHandshakeStatus;
                   }
                   
@@ -776,13 +776,11 @@ public class WebSocketReader extends Thread {
       }
    }
    
-   private SSLEngineResult wssHandshakeStep(
-         SSLEngineResult res, SSLEngineResult.HandshakeStatus lastHandshakeStatus
-   ) throws Exception {
+   private void wssHandshakeStep(SSLEngineResult.HandshakeStatus lastHandshakeStatus) throws Exception {
       switch (mSSLEngine.getHandshakeStatus()) {
       case NEED_UNWRAP:
          if (DEBUG) Log.d(TAG, "before UNWRAP: " + mBuffer.position() + " - " + mBuffer.limit() + " - " + mBuffer.remaining() + " - " + mBuffer.mark() + " - " + mBuffer.capacity());
-         res = mSSLEngine.unwrap(mBufferEnc, mBuffer);
+         SSLEngineResult res = mSSLEngine.unwrap(mBufferEnc, mBuffer);
 
          if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
          if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
@@ -819,6 +817,5 @@ public class WebSocketReader extends Thread {
          if (DEBUG) Log.d(TAG, "HS " + mSSLEngine.getHandshakeStatus() + " but still inside loop, unexpected");
          break;
       }
-      return res;
    }
 }
