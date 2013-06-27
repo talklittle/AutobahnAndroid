@@ -30,11 +30,10 @@ import javax.net.ssl.SSLEngine;
 import javax.net.ssl.SSLEngineResult;
 import javax.net.ssl.SSLEngineResult.HandshakeStatus;
 
-import de.tavendo.autobahn.WebSocketConnection.MasterHandler;
-
 import android.os.Message;
 import android.util.Log;
 import android.util.Pair;
+import de.tavendo.autobahn.WebSocketConnection.MasterHandler;
 
 /**
  * WebSocket reader, the receiving leg of a WebSockets connection.
@@ -685,74 +684,29 @@ public class WebSocketReader extends Thread {
 
          mBuffer.clear();
          do {
-            int len = 0;
-            
             if (mSSLEngine != null) {
-               SSLEngineResult res = null;
+               SSLEngineResult res = wssReadAndDecode();
                
-               SSLEngineResult.HandshakeStatus lastHandshakeStatus = null;
-               while (mSSLEngine.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.FINISHED) {
-                  if (res != null && res.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
-                     len = wssRead();
-                  }
-
-                  SSLEngineResult.HandshakeStatus switchHandshakeStatus = mSSLEngine.getHandshakeStatus();
-                  
-                  switch (switchHandshakeStatus) {
-                  case NOT_HANDSHAKING:
-                  case NEED_TASK:
-                     len = wssRead();
-                     break;
-                  case NEED_UNWRAP:
-                     if (len >= 0) {
-                        // decrypt data
-                        mBufferEnc.flip();
-                        if (DEBUG) Log.d(TAG, "before UNWRAP: " + mBuffer.position() + " - " + mBuffer.limit() + " - " + mBuffer.remaining() + " - " + mBuffer.mark() + " - " + mBuffer.capacity());
-                        res = mSSLEngine.unwrap(mBufferEnc, mBuffer);
-   
-                        if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
-                        if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
-                        if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
-                        
-                        runDelegatedTasks(res);
-                        if (DEBUG) Log.d(TAG, "after  UNWRAP: " + mBuffer.position() + " - " + mBuffer.limit() + " - " + mBuffer.remaining() + " - " + mBuffer.mark() + " - " + mBuffer.capacity());
-                        
-                        if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
-                        if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
-                        if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
-                     } else {
-                        // shit happened
-                        if (DEBUG) Log.d(TAG, "run() : ConnectionLost");
-                        notify(new WebSocketMessage.ConnectionLost());
-                        mStopped = true;
-                     }
-                     break;
-                  case NEED_WRAP:
-                     if (lastHandshakeStatus != SSLEngineResult.HandshakeStatus.NEED_WRAP) {
-                        if (DEBUG) Log.d(TAG, "NEED_WRAP => trigger");
-                        notify(new WebSocketMessage.TriggerWrap());
-                     } else {
-                        // if we already triggered a write, poll for handshake status to change
-                        try {
-                           Thread.sleep(30);
-                        } catch (InterruptedException ignore) {}
-                     }
-                     break;
-                  case FINISHED:
-                     if (DEBUG) Log.d(TAG, "HS FINISHED but still inside loop, unexpected");
-                     break;
+               if (res != null) {
+                  SSLEngineResult.HandshakeStatus lastHandshakeStatus = res.getHandshakeStatus();
+                  while (res.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.FINISHED &&
+                         res.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
+                     
+                     SSLEngineResult.HandshakeStatus switchHandshakeStatus = res.getHandshakeStatus();
+                     res = wssHandshake(res, lastHandshakeStatus);
+                     lastHandshakeStatus = switchHandshakeStatus;
                   }
                   
-                  lastHandshakeStatus = switchHandshakeStatus;
-               }
-               
-               // process buffered data
-               while (consumeData()) {
-                  // consume further until all processed
+                  // process buffered data
+                  while (consumeData()) {
+                     // consume further until all processed
+                  }
+               } else {
+                  // res == null: no data, or error
                }
             } else {
                // not SSL
-               len = mSocket.read(mBuffer);
+               int len = mSocket.read(mBuffer);
                if (DEBUG) Log.d(TAG, "READ (WS): " + len);
                
                if (len > 0) {
@@ -800,10 +754,67 @@ public class WebSocketReader extends Thread {
       if (DEBUG) Log.d(TAG, "ended");
    }
    
-   private int wssRead() throws IOException {
-      if (DEBUG) Log.d(TAG, "READ (WSS): " + mBufferEnc.remaining() + " - " + mSocket.isBlocking());
+   /**
+    * @return The result of SSLEngine.unwrap, or null if no data or error.
+    */
+   private SSLEngineResult wssReadAndDecode() throws IOException {
       mBufferEnc.clear();
       // blocking read on socket
-      return mSocket.read(mBufferEnc);
+      int len = mSocket.read(mBufferEnc);
+      if (DEBUG) Log.d(TAG, "READ (WSS): " + len + " - " + mBufferEnc.remaining() + " - " + mSocket.isBlocking());
+
+      if (len > 0) {
+         mBufferEnc.flip();
+         return mSSLEngine.unwrap(mBufferEnc, mBuffer);
+      } else if (len < 0) {
+         if (DEBUG) Log.d(TAG, "wssReadAndDecode() : ConnectionLost");
+         notify(new WebSocketMessage.ConnectionLost());
+         mStopped = true;
+         return null;
+      } else {
+         return null;
+      }
+   }
+   
+   private SSLEngineResult wssHandshake(SSLEngineResult res, SSLEngineResult.HandshakeStatus lastHandshakeStatus) throws Exception {
+      switch (res.getHandshakeStatus()) {
+      case NEED_UNWRAP:
+         if (DEBUG) Log.d(TAG, "before UNWRAP: " + mBuffer.position() + " - " + mBuffer.limit() + " - " + mBuffer.remaining() + " - " + mBuffer.mark() + " - " + mBuffer.capacity());
+         res = mSSLEngine.unwrap(mBufferEnc, mBuffer);
+
+         if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
+         if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
+         if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
+         
+         if (res.getStatus() == SSLEngineResult.Status.BUFFER_UNDERFLOW) {
+            res = wssReadAndDecode();
+         }
+         
+         runDelegatedTasks(res);
+         if (DEBUG) Log.d(TAG, "after  UNWRAP: " + mBuffer.position() + " - " + mBuffer.limit() + " - " + mBuffer.remaining() + " - " + mBuffer.mark() + " - " + mBuffer.capacity());
+         
+         if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
+         if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
+         if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
+         break;
+      case NEED_WRAP:
+         if (lastHandshakeStatus != SSLEngineResult.HandshakeStatus.NEED_WRAP) {
+            if (DEBUG) Log.d(TAG, "NEED_WRAP => trigger");
+            notify(new WebSocketMessage.TriggerWrap());
+         } else {
+            // if we already triggered a write, poll for handshake status to change
+            try {
+               Thread.sleep(30);
+            } catch (InterruptedException ignore) {}
+         }
+         break;
+      case FINISHED:
+         if (DEBUG) Log.d(TAG, "HS FINISHED but still inside loop, unexpected");
+         break;
+      default:
+         if (DEBUG) Log.d(TAG, "default case, don't know what to do");
+         break;
+      }
+      return res;
    }
 }

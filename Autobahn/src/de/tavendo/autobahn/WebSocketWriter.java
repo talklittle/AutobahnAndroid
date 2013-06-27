@@ -419,16 +419,32 @@ public class WebSocketWriter extends Handler {
          // bytes written to socket
          int written = 0;
          
-         // trigger sending even when no (new) application data arrived
-         boolean trigger = false;
-         
          if (msg.obj instanceof WebSocketMessage.TriggerWrap) {
-            
             // This message is only sent from WebSocketReader during TLS handshake
-            trigger = true;
-            
+            if (mSSLEngine != null) {
+               mBufferEnc.clear();
+               while (mSSLEngine.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP) {
+                  SSLEngineResult res = mSSLEngine.wrap(mBuffer.getBuffer(), mBufferEnc.getBuffer());
+                  
+                  if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
+                  if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
+                  if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
+                  
+                  if (res.getStatus() == SSLEngineResult.Status.BUFFER_OVERFLOW) {
+                     mBufferEnc.flip();
+                     
+                     while (mBufferEnc.remaining() > 0) {
+                        // this can block on socket write
+                        written = mSocket.write(mBufferEnc.getBuffer());
+                        if (DEBUG) Log.d(TAG, "WRITTEN (WSS): " + written);
+                     }
+                     mBufferEnc.clear();
+                  }
+
+                  runDelegatedTasks(res);
+               }
+            }
          } else {
-            
             // clear send buffer
             mBuffer.clear();
 
@@ -437,41 +453,8 @@ public class WebSocketWriter extends Handler {
 
             // send out buffered data
             mBuffer.flip();
-         }
-         
-         while (mBuffer.remaining() > 0 || trigger) {
             
-            if (mSSLEngine != null) {
-               
-               mBufferEnc.clear();
-               
-               SSLEngineResult res = mSSLEngine.wrap(mBuffer.getBuffer(), mBufferEnc.getBuffer());
-               
-               if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
-               if (DEBUG) Log.d(TAG, "res HS Status " + res.getHandshakeStatus());
-               if (DEBUG) Log.d(TAG, "HS Status " + mSSLEngine.getHandshakeStatus());
-
-               runDelegatedTasks(res);
-                              
-               mBufferEnc.flip();
-               
-               while (mBufferEnc.remaining() > 0) {
-                  // this can block on socket write
-                  written = mSocket.write(mBufferEnc.getBuffer());
-                  if (DEBUG) Log.d(TAG, "WRITTEN (WSS): " + written);
-               }
-               
-               //trigger = (res.getStatus() != SSLEngineResult.Status.CLOSED && res.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP);
-               trigger = mSSLEngine.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_WRAP;
-               if (DEBUG) Log.d(TAG, "Retrigger: " + trigger);
-               
-               
-               if (!trigger) {
-                  break;
-               }
-               //if (res.getStatus() == SSLEngineResult.Status.CLOSED || res.getHandshakeStatus() == SSLEngineResult.HandshakeStatus.NEED_UNWRAP) break;
-
-            } else {
+            while (mBuffer.remaining() > 0) {
                // this can block on socket write
                written = mSocket.write(mBuffer.getBuffer());
                if (DEBUG) Log.d(TAG, "WRITTEN (WS): " + written);
