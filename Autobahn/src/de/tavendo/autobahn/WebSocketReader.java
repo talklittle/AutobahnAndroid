@@ -655,11 +655,11 @@ public class WebSocketReader extends Thread {
 
    }
 
-   private void runDelegatedTasks(SSLEngineResult result) throws Exception {
+   private void runDelegatedTasks(SSLEngineResult.HandshakeStatus handshakeStatus) throws Exception {
       
-      if (DEBUG) Log.d(TAG, "SSL result: " + result.toString());
+      if (DEBUG) Log.d(TAG, "runDelegatedTasks: HS: " + handshakeStatus);
 
-      if (result.getHandshakeStatus() == HandshakeStatus.NEED_TASK) {
+      if (handshakeStatus == HandshakeStatus.NEED_TASK) {
          Runnable runnable;
          while ((runnable = mSSLEngine.getDelegatedTask()) != null) {
             if (DEBUG) Log.d(TAG, "running SSL delegated task");
@@ -693,7 +693,7 @@ public class WebSocketReader extends Thread {
                          res.getHandshakeStatus() != SSLEngineResult.HandshakeStatus.NOT_HANDSHAKING) {
                      
                      SSLEngineResult.HandshakeStatus switchHandshakeStatus = res.getHandshakeStatus();
-                     res = wssHandshake(res, lastHandshakeStatus);
+                     res = wssHandshakeStep(res, lastHandshakeStatus);
                      lastHandshakeStatus = switchHandshakeStatus;
                   }
                   
@@ -776,8 +776,10 @@ public class WebSocketReader extends Thread {
       }
    }
    
-   private SSLEngineResult wssHandshake(SSLEngineResult res, SSLEngineResult.HandshakeStatus lastHandshakeStatus) throws Exception {
-      switch (res.getHandshakeStatus()) {
+   private SSLEngineResult wssHandshakeStep(
+         SSLEngineResult res, SSLEngineResult.HandshakeStatus lastHandshakeStatus
+   ) throws Exception {
+      switch (mSSLEngine.getHandshakeStatus()) {
       case NEED_UNWRAP:
          if (DEBUG) Log.d(TAG, "before UNWRAP: " + mBuffer.position() + " - " + mBuffer.limit() + " - " + mBuffer.remaining() + " - " + mBuffer.mark() + " - " + mBuffer.capacity());
          res = mSSLEngine.unwrap(mBufferEnc, mBuffer);
@@ -790,7 +792,7 @@ public class WebSocketReader extends Thread {
             res = wssReadAndDecode();
          }
          
-         runDelegatedTasks(res);
+         runDelegatedTasks(res.getHandshakeStatus());
          if (DEBUG) Log.d(TAG, "after  UNWRAP: " + mBuffer.position() + " - " + mBuffer.limit() + " - " + mBuffer.remaining() + " - " + mBuffer.mark() + " - " + mBuffer.capacity());
          
          if (DEBUG) Log.d(TAG, "res Status " + res.getStatus());
@@ -808,11 +810,13 @@ public class WebSocketReader extends Thread {
             } catch (InterruptedException ignore) {}
          }
          break;
-      case FINISHED:
-         if (DEBUG) Log.d(TAG, "HS FINISHED but still inside loop, unexpected");
+      case NEED_TASK:
+         if (DEBUG) Log.d(TAG, "NEED_TASK");
+         runDelegatedTasks(mSSLEngine.getHandshakeStatus());
          break;
-      default:
-         if (DEBUG) Log.d(TAG, "default case, don't know what to do");
+      case FINISHED:
+      case NOT_HANDSHAKING:
+         if (DEBUG) Log.d(TAG, "HS " + mSSLEngine.getHandshakeStatus() + " but still inside loop, unexpected");
          break;
       }
       return res;
