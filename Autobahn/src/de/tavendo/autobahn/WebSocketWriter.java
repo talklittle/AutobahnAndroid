@@ -422,10 +422,9 @@ public class WebSocketWriter extends Handler {
          // trigger sending even when no (new) application data arrived
          boolean trigger = false;
          
-         if (msg.obj instanceof WebSocketMessage.TriggerWrite) {
+         if (msg.obj instanceof WebSocketMessage.TriggerWrap) {
             
-            // This message is only sent from WebSocketReader for TLS
-            // after a TLS handshake has been finished
+            // This message is only sent from WebSocketReader during TLS handshake
             trigger = true;
             
          } else {

@@ -29,8 +29,8 @@ public class WebSocketMessage {
    public static class Message {
    }
 
-   /// Trigger a Write
-   public static class TriggerWrite extends Message {
+   /// Trigger a Wrap (for TLS websockets handshake)
+   public static class TriggerWrap extends Message {
    }
 
    /// Quite background thread.

@@ -478,13 +478,13 @@ public class WebSocketConnection implements WebSocket {
                   if (DEBUG) Log.d(TAG, "could not call onBinaryMessage() .. handler already NULL");
                }
 
-            } else if (msg.obj instanceof WebSocketMessage.TriggerWrite) {
-
-               if (DEBUG) Log.d(TAG, "Trigger Write received");
-
+            } else if (msg.obj instanceof WebSocketMessage.TriggerWrap) {
+               
+               if (DEBUG) Log.d(TAG, "Trigger Wrap received");
+               
                // forward trigger to writer
                mWriter.forward(msg.obj);
-
+               
             } else if (msg.obj instanceof WebSocketMessage.Ping) {
 
                WebSocketMessage.Ping ping = (WebSocketMessage.Ping) msg.obj;
