@@ -34,7 +34,9 @@ import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.security.cert.X509Certificate;
 
+import android.annotation.TargetApi;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Message;
@@ -116,6 +118,15 @@ public class WebSocketConnection implements WebSocket {
 
       } else {
          Log.d(TAG, "NOT trusting all certificates");
+         return getDefaultSSLContext();
+      }
+   }
+   
+   @TargetApi(Build.VERSION_CODES.GINGERBREAD)
+   private SSLContext getDefaultSSLContext() throws NoSuchAlgorithmException {
+      if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD) {
+         return SSLContext.getDefault();
+      } else {
          return SSLContext.getInstance("Default");
       }
    }
