@@ -23,16 +23,21 @@ import java.net.InetSocketAddress;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.channels.SocketChannel;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
+import java.security.SecureRandom;
+import java.security.UnrecoverableKeyException;
+import java.security.cert.CertificateException;
+import java.security.cert.X509Certificate;
 
+import javax.net.ssl.KeyManagerFactory;
 import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLEngine;
 import javax.net.ssl.TrustManager;
+import javax.net.ssl.TrustManagerFactory;
 import javax.net.ssl.X509TrustManager;
-
-import java.security.KeyManagementException;
-import java.security.NoSuchAlgorithmException;
-import java.security.cert.CertificateException;
-import java.security.cert.X509Certificate;
 
 import android.annotation.TargetApi;
 import android.os.AsyncTask;
@@ -94,7 +99,7 @@ public class WebSocketConnection implements WebSocket {
    protected SSLEngine mSSLEngine;
 
 
-   protected SSLContext getSSLContext() throws KeyManagementException, NoSuchAlgorithmException {
+   protected SSLContext getSSLContext() throws KeyManagementException, NoSuchAlgorithmException, UnrecoverableKeyException, KeyStoreException {
       if (!mOptions.getVerifyCertificateAuthority()) {
          // Create a trust manager that does not validate certificate chains
          TrustManager tm = new X509TrustManager() {
@@ -123,11 +128,18 @@ public class WebSocketConnection implements WebSocket {
    }
    
    @TargetApi(Build.VERSION_CODES.GINGERBREAD)
-   private SSLContext getDefaultSSLContext() throws NoSuchAlgorithmException {
+   private SSLContext getDefaultSSLContext() throws NoSuchAlgorithmException, KeyManagementException, UnrecoverableKeyException, KeyStoreException {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD) {
          return SSLContext.getDefault();
       } else {
-         return SSLContext.getInstance("TLS");
+         KeyManagerFactory kmf = KeyManagerFactory.getInstance(KeyManagerFactory.getDefaultAlgorithm());
+         kmf.init(null, null);
+         TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+         tmf.init((KeyStore)null);
+         
+         SSLContext ctxt = SSLContext.getInstance("TLS");
+         ctxt.init(kmf.getKeyManagers(), tmf.getTrustManagers(), new SecureRandom());
+         return ctxt;
       }
    }
    
