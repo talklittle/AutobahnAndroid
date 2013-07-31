@@ -116,7 +116,7 @@ public class WebSocketConnection implements WebSocket {
 
       } else {
          Log.d(TAG, "NOT trusting all certificates");
-         return SSLContext.getDefault();
+         return SSLContext.getInstance("Default");
       }
    }
    
