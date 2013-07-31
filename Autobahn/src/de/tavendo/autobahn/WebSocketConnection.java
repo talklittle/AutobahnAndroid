@@ -127,7 +127,7 @@ public class WebSocketConnection implements WebSocket {
       if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.GINGERBREAD) {
          return SSLContext.getDefault();
       } else {
-         return SSLContext.getInstance("Default");
+         return SSLContext.getInstance("TLS");
       }
    }
    
